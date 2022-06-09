@@ -14,17 +14,19 @@
 void PrintMatrix(double* M, int n, int m);
 void PullMatrix(double* A, double* B, int n, int m, int x1, int y1, int x2, int y2);
 void Cholesky_Decomposition(double* A, double* L, int n);
-void _Cholesky_Decomposition(double* A, double* L, int n);
+void CholeskySeq(double* A, double* L, int n);
 void TriangularSystemSolve(double* L21, double* L11, double* A21, int n, int m);
+void _Cholesky_Decomposition(double* A, double* L, int n, int r, int iter, int N);
+void CholeskyFactor(double* A22, double* L21, double* A_22, int n, int r);
 
 #if DEBUG
 int main()
 {
-    int n = 7;
-    int r = 3;
+    int n = 300;
 
     double* A = new double[n * n];
-    
+    double* L = new double[n * n];
+
     srand(time(NULL));
     
     // Generate test matrix
@@ -51,36 +53,15 @@ int main()
 
     PrintMatrix(A, n, n);
 
-    double* A11 = new double[r * r];
-    double* A12 = new double[(n - r) * r];
-    double* A21 = new double[r * (n - r)];
-    double* A22 = new double[(n - r) * (n - r)];
+    Cholesky_Decomposition(A, L, n);
 
-    PullMatrix(A, A11, n, r,     0, 0, r, r);
-    PullMatrix(A, A12, n, n - r, 0, r, r, n);
-    PullMatrix(A, A21, n, r,     r, 0, n, r);
-    PullMatrix(A, A22, n, n - r, r, r, n, n);
+    PrintMatrix(L, n, n);
 
-    /*
-    PrintMatrix(A11, r, r);
-    PrintMatrix(A12, n - r, r);
-    PrintMatrix(A21, r, n - r);
-    PrintMatrix(A22, n - r, n - r);
-    */
-
-    double* L11 = new double[r * r];
-    _Cholesky_Decomposition(A11, L11, r);
-
-    PrintMatrix(L11, r, r);
-
-    double* L21 = new double[r * (n - r)];
-    TriangularSystemSolve(L21, L11, A21, r, n - r);
-
-    PrintMatrix(L21, r, n - r);
-
-    delete[] A;
-    //delete[] L;
-
+    return 0;
+}
+#else
+int main()
+{
     return 0;
 }
 #endif
@@ -113,17 +94,150 @@ void PullMatrix(double* A, double* B, int n, int m, int x1, int y1, int x2, int 
 
 void Cholesky_Decomposition(double* A, double* L, int n)
 {
-    int r = 10;
+    memset(L, 0, sizeof(double) * n * n);
 
-    // L11
-    _Cholesky_Decomposition(A, L, r);
+    int r = n;
 
-    // L21
+    if (n > 20)
+    {
+        r = 20;
+        if (n > 50)
+        {
+            r = 50;
+            if (n > 100)
+            {
+                r = 100;
+            }
+        }
+    }
 
-    // L22 recursion
+    _Cholesky_Decomposition(A, L, n, r, 0, n);
 }
 
-void _Cholesky_Decomposition(double* A, double* L, int n)
+void _Cholesky_Decomposition(double* A, double* L, int n, int r, int iter, int N)
+{
+    if (n == r)
+    {
+        double* A22 = A;
+
+        double* L22 = new double[n * n];
+        CholeskySeq(A22, L22, n);
+
+#if DEBUG
+        printf("Iter: %d, L22:\n", iter);
+        PrintMatrix(L22, n, n);
+#endif
+
+        // Push to L
+        for (int i = 0; i < n; ++i)
+        {
+            for (int j = 0; j < n; ++j)
+            {
+                L[n * iter + N * n * iter + i * N + j] = L22[i * n + j];
+            }
+        }
+
+        delete[] L22;
+        delete[] A22;
+
+        return;
+    }
+
+    // A11 working
+    double* A11 = new double[r * r];
+    PullMatrix(A, A11, n, r, 0, 0, r, r);
+
+    double* L11 = new double[r * r];
+    CholeskySeq(A11, L11, r);
+
+#if DEBUG
+    printf("Iter: %d, L11:\n", iter);
+    PrintMatrix(L11, r, r);
+#endif
+
+
+    // A21 working
+    double* A21 = new double[r * (n - r)];
+    PullMatrix(A, A21, n, r, r, 0, n, r);
+
+    double* L21 = new double[r * (n - r)];
+    TriangularSystemSolve(L21, L11, A21, r, n - r);
+    
+#if DEBUG
+    printf("Iter: %d, L21:\n", iter);
+    PrintMatrix(L21, r, n - r);
+#endif
+
+
+    // A22 recursive working
+    if (n > r)
+    {
+        double* A22 = new double[(n - r) * (n - r)];
+        PullMatrix(A, A22, n, n - r, r, r, n, n);
+
+        double* A_22 = new double[(n - r) * (n - r)];
+        CholeskyFactor(A22, L21, A_22, n - r, r);
+
+        delete[] A22;
+
+        _Cholesky_Decomposition(A_22, L, n - r, r, iter + 1, N);
+    }
+    else
+    {
+        int size = n - r;
+        int offset = r;
+
+        double* A22 = new double[size * size];
+        PullMatrix(A, A22, n, n - r, r, r, n, n);
+
+        double* L22 = new double[size * size];
+        CholeskySeq(A22, L22, size);
+
+#if DEBUG
+        printf("Iter: %d, L22:\n", iter);
+        PrintMatrix(L22, size, size);
+#endif
+
+        // Push to L
+        for (int i = 0; i < size; ++i)
+        {
+            for (int j = 0; j < size; ++j)
+            {
+                L[offset * iter + N * offset * iter + i * N + j] = L22[i * size + j];
+            }
+        }
+
+        delete[] L22;
+        delete[] A22;
+    }
+
+
+    // L building
+    // L11
+    for (int i = 0; i < r; ++i)
+    {
+        for (int j = 0; j < r; ++j)
+        {
+            L[r * iter + N * r * iter + i * N + j] = L11[i * r + j];
+        }
+    }
+    // L21
+    for (int i = 0; i < n - r; ++i)
+    {
+        for (int j = 0; j < r; ++j)
+        {
+            L[r * iter + N * r * iter + (i + r) * N + j] = L21[i * r + j];
+        }
+    }
+
+    delete[] A;
+    delete[] A11;
+    delete[] A21;
+    delete[] L11;
+    delete[] L21;
+}
+
+void CholeskySeq(double* A, double* L, int n)
 {
     memset(L, 0, sizeof(double) * n * n);
 
@@ -152,6 +266,8 @@ void _Cholesky_Decomposition(double* A, double* L, int n)
 
 void TriangularSystemSolve(double* L21, double* L11, double* A21, int n, int m)
 {
+    memset(L21, 0, sizeof(double) * n * m);
+
     for (int i = 0; i < m; ++i)
     {
         for (int j = 0; j < n; ++j)
@@ -178,6 +294,26 @@ void TriangularSystemSolve(double* L21, double* L11, double* A21, int n, int m)
                     }
                 }
             }
+        }
+    }
+}
+
+void CholeskyFactor(double* A22, double* L21, double* A_22, int n, int r)
+{
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            double mult = 0.0;
+
+            for (int k = 0; k < r; ++k)
+            {
+                mult += L21[i * r + k] * L21[j * r + k];
+            }
+
+            A_22[i * n + j] = A22[i * n + j] - mult;
+
+            mult = 0.0;
         }
     }
 }
