@@ -83,6 +83,7 @@ void PrintMatrix(double* M, int n, int m)
 
 void PullMatrix(double* A, double* B, int n, int m, int x1, int y1, int x2, int y2)
 {
+#pragma omp parallel for collapse(2)
     for (int i = 0; i < x2 - x1; ++i)
     {
         for (int j = 0; j < y2 - y1; ++j)
@@ -104,10 +105,6 @@ void Cholesky_Decomposition(double* A, double* L, int n)
         if (n > 50)
         {
             r = 50;
-            if (n > 100)
-            {
-                r = 100;
-            }
         }
     }
 
@@ -129,6 +126,7 @@ void _Cholesky_Decomposition(double* A, double* L, int n, int r, int iter, int N
 #endif
 
         // Push to L
+#pragma omp parallel for collapse(2)
         for (int i = 0; i < n; ++i)
         {
             for (int j = 0; j < n; ++j)
@@ -199,6 +197,7 @@ void _Cholesky_Decomposition(double* A, double* L, int n, int r, int iter, int N
 #endif
 
         // Push to L
+#pragma omp parallel for collapse(2)
         for (int i = 0; i < size; ++i)
         {
             for (int j = 0; j < size; ++j)
@@ -214,6 +213,7 @@ void _Cholesky_Decomposition(double* A, double* L, int n, int r, int iter, int N
 
     // L building
     // L11
+#pragma omp parallel for collapse(2)
     for (int i = 0; i < r; ++i)
     {
         for (int j = 0; j < r; ++j)
@@ -222,6 +222,7 @@ void _Cholesky_Decomposition(double* A, double* L, int n, int r, int iter, int N
         }
     }
     // L21
+#pragma omp parallel for collapse(2)
     for (int i = 0; i < n - r; ++i)
     {
         for (int j = 0; j < r; ++j)
@@ -251,6 +252,7 @@ void CholeskySeq(double* A, double* L, int n)
 
         L[i * n + i] = sqrt(L[i * n + i]);
 
+#pragma omp parallel for
         for (int j = i + 1; j < n; ++j)
         {
             L[j * n + i] = A[j * n + i];
@@ -268,6 +270,7 @@ void TriangularSystemSolve(double* L21, double* L11, double* A21, int n, int m)
 {
     memset(L21, 0, sizeof(double) * n * m);
 
+#pragma omp parallel for collapse(2)
     for (int i = 0; i < m; ++i)
     {
         for (int j = 0; j < n; ++j)
@@ -300,6 +303,7 @@ void TriangularSystemSolve(double* L21, double* L11, double* A21, int n, int m)
 
 void CholeskyFactor(double* A22, double* L21, double* A_22, int n, int r)
 {
+#pragma omp parallel for collapse(3)
     for (int i = 0; i < n; ++i)
     {
         for (int j = 0; j < n; ++j)
